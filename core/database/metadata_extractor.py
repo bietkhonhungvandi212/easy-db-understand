@@ -4,30 +4,23 @@ import pandas as pd
 from typing import List, Dict, Any, Optional, Tuple
 from rich.console import Console
 from rich.table import Table
+from settings_config import Settings
 
 class DatabaseMetadataExtractor:
     """
     A class to extract and analyze metadata from MySQL database schemas,
     optimized for large insurance databases with 300+ tables.
     """
-    
-    def __init__(
-        self, 
-        host: str = "localhost",
-        port: int = 3306,
-        user: str = "root",
-        password: str = "",
-        database: str = "insurance_db",
-        charset: str = "utf8mb4"
-    ):
+    settings = Settings()
+    def __init__(self):
         """Initialize the extractor with database connection parameters."""
         self.connection_params = {
-            "host": host,
-            "port": port,
-            "user": user,
-            "password": password,
-            "database": database,
-            "charset": charset,
+            "host": self.settings.database.host,
+            "port": self.settings.database.port,
+            "user": self.settings.database.user,
+            "password": self.settings.database.password,
+            "database": self.settings.database.database,
+            "charset": self.settings.database.charset,
             "cursorclass": pymysql.cursors.DictCursor
         }
         
@@ -129,48 +122,114 @@ class DatabaseMetadataExtractor:
         return pd.DataFrame(foreign_keys)
     
     def find_tables_by_keyword(self, keyword: str) -> pd.DataFrame:
-        """Find tables that might be related to a specific keyword."""
+        """Find tables that might be related to a specific keyword, including foreign key relationships."""
         query = """
+        WITH related_tables AS (
+            -- Direct table matches
+            SELECT 
+                t.TABLE_NAME as table_name, 
+                t.TABLE_COMMENT as description,
+                'direct_match' as relationship_type
+            FROM 
+                INFORMATION_SCHEMA.TABLES t
+            WHERE 
+                t.TABLE_SCHEMA = %s AND
+                (
+                    t.TABLE_NAME LIKE %s OR
+                    t.TABLE_COMMENT LIKE %s
+                )
+            
+            UNION
+            
+            -- Column matches
+            SELECT 
+                c.TABLE_NAME as table_name,
+                t.TABLE_COMMENT as description,
+                'column_match' as relationship_type
+            FROM 
+                INFORMATION_SCHEMA.COLUMNS c
+            JOIN
+                INFORMATION_SCHEMA.TABLES t
+            ON
+                c.TABLE_NAME = t.TABLE_NAME AND
+                c.TABLE_SCHEMA = t.TABLE_SCHEMA
+            WHERE 
+                c.TABLE_SCHEMA = %s AND
+                (
+                    c.COLUMN_NAME LIKE %s OR
+                    c.COLUMN_COMMENT LIKE %s
+                )
+            
+            UNION
+            
+            -- Foreign key relationships (tables that reference the matched tables)
+            SELECT DISTINCT
+                k.TABLE_NAME as table_name,
+                t.TABLE_COMMENT as description,
+                'referenced_by' as relationship_type
+            FROM 
+                INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+            JOIN 
+                INFORMATION_SCHEMA.TABLES t
+            ON 
+                k.TABLE_NAME = t.TABLE_NAME AND
+                k.TABLE_SCHEMA = t.TABLE_SCHEMA
+            WHERE 
+                k.TABLE_SCHEMA = %s AND
+                k.REFERENCED_TABLE_NAME IN (
+                    SELECT TABLE_NAME 
+                    FROM INFORMATION_SCHEMA.TABLES 
+                    WHERE TABLE_SCHEMA = %s AND
+                    (
+                        TABLE_NAME LIKE %s OR
+                        TABLE_COMMENT LIKE %s
+                    )
+                )
+            
+            UNION
+            
+            -- Tables that are referenced by the matched tables
+            SELECT DISTINCT
+                k.REFERENCED_TABLE_NAME as table_name,
+                t.TABLE_COMMENT as description,
+                'references' as relationship_type
+            FROM 
+                INFORMATION_SCHEMA.KEY_COLUMN_USAGE k
+            JOIN 
+                INFORMATION_SCHEMA.TABLES t
+            ON 
+                k.REFERENCED_TABLE_NAME = t.TABLE_NAME AND
+                k.REFERENCED_TABLE_SCHEMA = t.TABLE_SCHEMA
+            WHERE 
+                k.TABLE_SCHEMA = %s AND
+                k.TABLE_NAME IN (
+                    SELECT TABLE_NAME 
+                    FROM INFORMATION_SCHEMA.TABLES 
+                    WHERE TABLE_SCHEMA = %s AND
+                    (
+                        TABLE_NAME LIKE %s OR
+                        TABLE_COMMENT LIKE %s
+                    )
+                )
+        )
         SELECT 
-            t.TABLE_NAME as table_name, 
-            t.TABLE_COMMENT as description
+            table_name,
+            description,
+            GROUP_CONCAT(DISTINCT relationship_type) as relationships
         FROM 
-            INFORMATION_SCHEMA.TABLES t
-        WHERE 
-            t.TABLE_SCHEMA = %s AND
-            (
-                t.TABLE_NAME LIKE %s OR
-                t.TABLE_COMMENT LIKE %s
-            )
-        UNION
-        SELECT 
-            c.TABLE_NAME as table_name,
-            t.TABLE_COMMENT as description
-        FROM 
-            INFORMATION_SCHEMA.COLUMNS c
-        JOIN
-            INFORMATION_SCHEMA.TABLES t
-        ON
-            c.TABLE_NAME = t.TABLE_NAME AND
-            c.TABLE_SCHEMA = t.TABLE_SCHEMA
-        WHERE 
-            c.TABLE_SCHEMA = %s AND
-            (
-                c.COLUMN_NAME LIKE %s OR
-                c.COLUMN_COMMENT LIKE %s
-            )
+            related_tables
+        GROUP BY 
+            table_name, description
         ORDER BY 
             table_name
         """
         
         search_pattern = f"%{keyword}%"
         params = [
-            self.connection_params["database"], 
-            search_pattern, 
-            search_pattern,
-            self.connection_params["database"], 
-            search_pattern, 
-            search_pattern
+            self.connection_params["database"], search_pattern, search_pattern,  # Direct matches
+            self.connection_params["database"], search_pattern, search_pattern,  # Column matches
+            self.connection_params["database"], self.connection_params["database"], search_pattern, search_pattern,  # Referenced by
+            self.connection_params["database"], self.connection_params["database"], search_pattern, search_pattern   # References
         ]
         
         with self._get_connection() as conn:
@@ -178,7 +237,7 @@ class DatabaseMetadataExtractor:
                 cursor.execute(query, params)
                 tables = cursor.fetchall()
                 
-        return pd.DataFrame(tables).drop_duplicates()
+        return pd.DataFrame(tables)
     
     # NOTE: This function has not been implemented yet
     def analyze_feature_related_schema(self, feature_keyword: str) -> Dict[str, Any]:
