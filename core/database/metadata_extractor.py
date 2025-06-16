@@ -1,9 +1,7 @@
 import asyncio
 import pymysql
 import pandas as pd
-from typing import List, Dict, Any, Optional, Tuple
-from rich.console import Console
-from rich.table import Table
+from typing import Dict, Any, Optional
 from settings_config import Settings
 
 class DatabaseMetadataExtractor:

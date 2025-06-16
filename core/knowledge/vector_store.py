@@ -5,42 +5,41 @@ import numpy as np
 import chromadb
 from chromadb.config import Settings
 from sentence_transformers import SentenceTransformer
+from chromadb import Client, Settings as ChromaSettings
+from settings_config import Settings as AppSettings
 
 class VectorStore:
     """
     ChromaDB-based vector store for schema metadata storage and retrieval
     """
     
-    def __init__(
-        self,
-        persist_directory: str = "./data/embeddings",
-        collection_name: str = "insurance_schema",
-        embedding_model: str = "all-MiniLM-L6-v2"
-    ):
+    def __init__(self):
         """Initialize the vector store with configuration"""
-        self.persist_directory = persist_directory
-        self.collection_name = collection_name
-        self.embedding_model_name = embedding_model
+        settings = AppSettings()
+        self.persist_directory = settings.vector_store.persist_directory
+        self.collection_name = settings.vector_store.collection_name
+        self.embedding_model = settings.vector_store.embedding_model
         
-        # Ensure persistence directory exists
-        os.makedirs(self.persist_directory, exist_ok=True)
+        # Initialize the embedding model
+        self.model = SentenceTransformer(self.embedding_model)
         
         # Initialize ChromaDB client
-        self.chroma_client = chromadb.PersistentClient(
-            path=self.persist_directory
+        self.client = chromadb.PersistentClient(
+            path=self.persist_directory,
+            settings=ChromaSettings(
+                anonymized_telemetry=False
+            )
         )
         
         # Get or create collection
-        self.collection = self.chroma_client.get_or_create_collection(
-            name=self.collection_name
+        self.collection = self.client.get_or_create_collection(
+            name=self.collection_name,
+            metadata={"hnsw:space": "cosine"}
         )
-        
-        # Initialize embedding model
-        self.embedding_model = SentenceTransformer(self.embedding_model_name)
         
     def get_embedding(self, text: str) -> List[float]:
         """Generate embedding for a text string"""
-        return self.embedding_model.encode(text).tolist()
+        return self.model.encode(text).tolist()
     
     def add_table(
         self,
@@ -57,7 +56,7 @@ class VectorStore:
         table_text = f"Table: {table_name}\nDescription: {description}\n\nColumns:\n"
         for col in columns:
             col_desc = col.get("description", "")
-            table_text += f"- {col['name']} ({col['type']}): {col_desc}\n"
+            table_text += f"- {col['column_name']} ({col['data_type']}): {col_desc}\n"
             
         # Create a unique ID for the document
         doc_id = f"table_{table_name}"
