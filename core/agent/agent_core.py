@@ -434,13 +434,12 @@ yet easy to understand for both technical and business users."""
         console.print(f"[bold green]🚀 Prompt have created successfully:\n[/bold green] {prompt}")
         
         # Generate response
-        # response = self.llm.generate_response(
-        #     prompt=prompt,
-        #     system_message=self.system_prompts["default"]
-        # )
+        response = self.llm.generate_response(
+            prompt=prompt,
+            system_message=self.system_prompts["default"]
+        )
         
         # Save to memory
-        # self.memory.add_interaction(query, response.content)
+        self.memory.add_interaction(query, response.content)
         
-        # return response.content
-        return prompt
+        return response.content
