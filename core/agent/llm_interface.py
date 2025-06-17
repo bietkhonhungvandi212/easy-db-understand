@@ -41,8 +41,6 @@ class LLMInterface:
         temperature: Optional[float] = None,
         max_tokens: Optional[int] = None
     ) -> LLMResponse:
-        """Generate a response from the LLM"""
-        console.print(f"[bold green]🚀 Prompt Sent:[/bold green] {prompt}")
         try:
             messages = []
             

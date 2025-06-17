@@ -42,7 +42,7 @@ class TestLLMAgent:
         # Test queries
         test_queries = [
             # "I am developing the email for welcome email for new members, you should focus on the tables related to the email, member",
-            "When i want to set up company, member, and policy, what tables should i use?",
+            "what is the tables related to company and member?",
             # "Show me the structure of the accident table",
             # "What are the main tables for storing insurance claims?",
             # "How are policies and claims related in the database?",
