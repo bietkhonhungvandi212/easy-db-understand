@@ -36,16 +36,27 @@ class VectorStoreSettings(BaseSettings):
     collection_name: str = os.getenv("VECTOR_STORE_COLLECTION_NAME", "insurance_schema")
     embedding_model: str = os.getenv("VECTOR_STORE_EMBEDDING_MODEL", "all-MiniLM-L6-v2")
 
-# class VectorSettings(BaseSettings):
-#     """Vector database settings"""
-#     host: str = os.getenv("VECTOR_HOST", "localhost")
-#     port: int = int(os.getenv("VECTOR_PORT", "6333"))
-#     collection: str = os.getenv("VECTOR_COLLECTION", "insurance_vectors")
-
 class AgentSettings(BaseSettings):
     """Agent configuration settings"""
+    max_history: int = int(os.getenv("AGENT_MAX_HISTORY", "10"))
+    cache_enabled: bool = os.getenv("AGENT_CACHE_ENABLED", "True").lower() == "true"
+    cache_ttl: int = int(os.getenv("AGENT_CACHE_TTL", "3600"))
+    max_tables_per_query: int = int(os.getenv("AGENT_MAX_TABLES_PER_QUERY", "50"))
     max_iterations: int = int(os.getenv("AGENT_MAX_ITERATIONS", "5"))
-    timeout: int = int(os.getenv("AGENT_TIMEOUT", "300"))
+    excluded_fields: List[str] = [
+        "created_by",
+        "created_on",
+        "updated_by",
+        "updated_on",
+        "created_at",
+        "updated_at",
+        "created_date",
+        "updated_date",
+        "created_time",
+        "updated_time",
+        "created_timestamp",
+        "updated_timestamp"
+    ]
 
 class APISettings(BaseSettings):
     """API server settings"""
